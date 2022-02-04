@@ -21,10 +21,11 @@ BATCH_SIZE = 20
 
 def get_fps(filename):
     output = subprocess.run(['ffmpeg', '-i', filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,text=True).stdout
-    fps = re.findall(r'\d+ fps', output, flags=re.MULTILINE)
-    try:fps=
-        return int(fps[0].split(' ')[0])
+    match = re.search(r'([\d.]+) fps', output, flags=re.MULTILINE)
+    try:
+        return float(match.group(1))
     except:
+        print("[!] Could not detect FPS; defaulting to 25.")
         return 25
 
 
