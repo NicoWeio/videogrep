@@ -28,6 +28,12 @@ def get_fps(filename):
         print("[!] Could not detect FPS; defaulting to 25.")
         return 25
 
+def get_duration(filename):
+    """Determine the video length in seconds using ffprobe"""
+    output = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
+    print(f"Output: {output}")
+    return float(output)
+
 
 def get_ngrams(inputfile, n=1, use_transcript=False, use_vtt=False):
     '''
@@ -131,15 +137,15 @@ def make_otio(timestamps, name):
     tl.tracks.append(tr)
 
 
-    fpses = {}
+    filedata = {}
 
     rec_in = 0
 
     for index, timestamp in enumerate(timestamps):
-        if timestamp['file'] not in fpses:
-            fpses[timestamp['file']] = get_fps(timestamp['file'])
+        if timestamp['file'] not in filedata:
+            filedata[timestamp['file']] = get_fps(timestamp['file']), get_duration(timestamp['file'])
 
-        fps = fpses[timestamp['file']]
+        fps, file_duration = filedata[timestamp['file']]
 
         n = str(index + 1).zfill(4)
 
@@ -162,12 +168,12 @@ def make_otio(timestamps, name):
                     # available range is the content available for editing
                     available_range=otio.opentime.TimeRange(
                         start_time=otio.opentime.RationalTime(0, fps),
-                        duration=otio.opentime.RationalTime(time_out, fps)#TODO!!!
+                        duration=otio.opentime.RationalTime(file_duration * fps, fps) #TODO!!!
                     )
                 ),
                 source_range=otio.opentime.TimeRange(
-                    start_time=otio.opentime.RationalTime(int(time_in * fps), fps),
-                    duration=otio.opentime.RationalTime(int(duration * fps), fps)
+                    start_time=otio.opentime.RationalTime(time_in * fps, fps),
+                    duration=otio.opentime.RationalTime(duration * fps, fps)
                 )
             )
         )
@@ -232,11 +238,6 @@ def cleanup_log_files(outputfile):
 
 
 def demo_supercut(composition, padding):
-    print('YEAH!')
-    print(composition[0])
-    from . import otio
-    otio.main(composition)
-
     """Print out timespans to be cut followed by the line number in the srt."""
     for i, c in enumerate(composition):
         line = c['line']
