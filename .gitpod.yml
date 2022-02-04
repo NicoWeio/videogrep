@@ -1,0 +1,9 @@
+tasks:
+  - init: |
+      sudo apt-get -y install ffmpeg
+      python setup.py install
+      pip install moviepy yt-dlp
+      yt-dlp --write-auto-subs --sub-langs de -o vid "https://www.youtube.com/watch?v=3a3Q--Awc6A"
+vscode:
+  extensions:
+    - ms-python.python
