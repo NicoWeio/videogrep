@@ -20,9 +20,7 @@ BATCH_SIZE = 20
 
 
 def get_fps(filename):
-    process = subprocess.Popen(['ffmpeg', '-i', filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    returncode = process.wait()
-    output = process.stdout.read()
+    output = subprocess.run(['ffmpeg', '-i', filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,text=True).stdout
     fps = re.findall(r'\d+ fps', output, flags=re.MULTILINE)
     try:
         return int(fps[0].split(' ')[0])
