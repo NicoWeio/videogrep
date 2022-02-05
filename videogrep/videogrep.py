@@ -20,14 +20,21 @@ BATCH_SIZE = 20
 
 
 def get_fps(filename):
-    process = subprocess.Popen(['ffmpeg', '-i', filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    returncode = process.wait()
-    output = process.stdout.read()
-    fps = re.findall(r'\d+ fps', output, flags=re.MULTILINE)
+    # TODO: Can we use ffprobe for this?
+    output = subprocess.run(['ffmpeg', '-i', filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,text=True).stdout
+    match = re.search(r'([\d.]+) fps', output, flags=re.MULTILINE)
     try:
-        return int(fps[0].split(' ')[0])
+        # TODO: Before, this function returned ints. Not sure if returning floats breaks something…
+        return float(match.group(1))
     except:
+        print("[!] Could not detect FPS; defaulting to 25.")
         return 25
+
+def get_duration(filename):
+    """Determine the video length in seconds using ffprobe"""
+    output = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
+    print(f"Output: {output}")
+    return float(output)
 
 
 def get_ngrams(inputfile, n=1, use_transcript=False, use_vtt=False):
@@ -122,6 +129,59 @@ def make_edl(timestamps, name):
     with open(name, 'w') as outfile:
         outfile.write(out)
 
+def make_otio(timestamps, name):
+    '''Converts an array of ordered timestamps into an OTIO'''
+    import opentimelineio as otio
+
+    # build the structure
+    tl = otio.schema.Timeline(name="My timeline")
+    tr = otio.schema.Track(name="Supercut")
+    tl.tracks.append(tr)
+
+
+    filedata = {}
+
+    rec_in = 0
+
+    for index, timestamp in enumerate(timestamps):
+        if timestamp['file'] not in filedata:
+            filedata[timestamp['file']] = get_fps(timestamp['file']), get_duration(timestamp['file'])
+
+        fps, file_duration = filedata[timestamp['file']]
+
+        n = str(index + 1).zfill(4)
+
+        time_in = timestamp['start']
+        time_out = timestamp['end']
+        duration = time_out - time_in
+
+        rec_out = rec_in + duration
+
+        full_name = 'reel_{}'.format(n)
+
+        filename = timestamp['file']
+
+        # put the clip into the track
+        tr.append(
+            otio.schema.Clip(
+                name=full_name,
+                media_reference=otio.schema.ExternalReference(
+                    target_url=filename,
+                    # available range is the content available for editing
+                    available_range=otio.opentime.TimeRange(
+                        start_time=otio.opentime.RationalTime(0, fps),
+                        duration=otio.opentime.RationalTime(file_duration * fps, fps) #TODO!!!
+                    )
+                ),
+                source_range=otio.opentime.TimeRange(
+                    start_time=otio.opentime.RationalTime(time_in * fps, fps),
+                    duration=otio.opentime.RationalTime(duration * fps, fps)
+                )
+            )
+        )
+
+    # write the file to disk
+    otio.adapters.write_to_file(tl, name)
 
 def create_timestamps(inputfiles):
     files = audiogrep.convert_to_wav(inputfiles)
@@ -480,6 +540,8 @@ def videogrep(inputfile, outputfile, search, searchtype, maxclips=0, padding=0, 
         else:
             if os.path.splitext(outputfile)[1].lower() == '.edl':
                 make_edl(composition, outputfile)
+            elif os.path.splitext(outputfile)[1].lower() == '.otio':
+                make_otio(composition, outputfile)
             elif export_clips:
                 split_clips(composition, outputfile)
             else:
